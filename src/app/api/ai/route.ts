@@ -7,7 +7,19 @@ const openai = new OpenAI({
 
 export async function POST(req: NextRequest) {
   try {
-    const { scripture, title, mode } = await req.json();
+    const { scripture, title, mode, commentaries = [] } = await req.json();
+
+    const commentaryNames: Record<string, string> = {
+      matthew_henry: "Matthew Henry's Commentary",
+      spurgeon: "Charles Spurgeon's Sermons & Treasury of David",
+      john_calvin: "John Calvin's Commentaries",
+      adam_clarke: "Adam Clarke's Commentary",
+      john_macarthur: "John MacArthur's Study Bible Commentary",
+    };
+
+    const selectedCommentaryText = commentaries.length > 0
+      ? `\n\n**IMPORTANT: Include dedicated commentary sections from the following sources:**\n${commentaries.map((c: string) => `- ${commentaryNames[c] || c}`).join("\n")}\n\nFor each selected commentary, provide a section titled with the commentator's name containing:\n- Their key interpretation of this passage\n- Notable theological insights unique to their perspective\n- Any practical applications they emphasize\nPlace the commentary sections after your main analysis.`
+      : "";
 
     if (!scripture) {
       return NextResponse.json(
@@ -78,7 +90,7 @@ Provide 5 different sermon approaches, each with:
 Then recommend which angle is strongest and why. Use markdown formatting.`,
     };
 
-    const systemPrompt = prompts[mode] || prompts.outline;
+    const systemPrompt = (prompts[mode] || prompts.outline) + selectedCommentaryText;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",

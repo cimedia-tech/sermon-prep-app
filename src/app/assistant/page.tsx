@@ -25,6 +25,14 @@ const modes: { id: Mode; label: string; icon: typeof BookOpen; desc: string }[] 
   { id: "points", label: "Sermon Angles", icon: Lightbulb, desc: "5 creative sermon approaches to choose from" },
 ];
 
+const COMMENTARIES = [
+  { id: "matthew_henry", label: "Matthew Henry" },
+  { id: "spurgeon", label: "Charles Spurgeon" },
+  { id: "john_calvin", label: "John Calvin" },
+  { id: "adam_clarke", label: "Adam Clarke" },
+  { id: "john_macarthur", label: "John MacArthur" },
+];
+
 export default function AssistantPage() {
   const [scripture, setScripture] = useState("");
   const [title, setTitle] = useState("");
@@ -32,7 +40,14 @@ export default function AssistantPage() {
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [selectedCommentaries, setSelectedCommentaries] = useState<string[]>([]);
   const resultRef = useRef<HTMLDivElement>(null);
+
+  const toggleCommentary = (id: string) => {
+    setSelectedCommentaries((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    );
+  };
 
   const handleGenerate = async () => {
     if (!scripture.trim()) return;
@@ -43,7 +58,7 @@ export default function AssistantPage() {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scripture, title, mode }),
+        body: JSON.stringify({ scripture, title, mode, commentaries: selectedCommentaries }),
       });
 
       const data = await res.json();
@@ -157,6 +172,41 @@ export default function AssistantPage() {
                 onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
               />
             </div>
+
+            {/* Commentary Sources */}
+            <div>
+              <label className="block text-xs text-white/50 mb-2.5 uppercase tracking-wider">
+                Include Commentary Perspectives
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {COMMENTARIES.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => toggleCommentary(c.id)}
+                    className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-left text-sm transition-all duration-200 ${
+                      selectedCommentaries.includes(c.id)
+                        ? "bg-violet-500/15 border-violet-500/40 text-violet-300"
+                        : "bg-white/[0.02] border-white/5 text-white/40 hover:border-white/15"
+                    }`}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded flex-shrink-0 border flex items-center justify-center transition-all ${
+                        selectedCommentaries.includes(c.id)
+                          ? "bg-violet-500 border-violet-500"
+                          : "border-white/20"
+                      }`}
+                    >
+                      {selectedCommentaries.includes(c.id) && (
+                        <Check className="w-2.5 h-2.5 text-white" />
+                      )}
+                    </div>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button
               onClick={handleGenerate}
               disabled={loading || !scripture.trim()}
