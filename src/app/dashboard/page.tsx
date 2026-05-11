@@ -26,12 +26,13 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState<"all" | "upcoming" | "past">("all");
+  const [showScriptures, setShowScriptures] = useState(false);
 
   // Form state
   const [file, setFile] = useState<File | null>(null);
   const [weekDate, setWeekDate] = useState("");
   const [anchorScripture, setAnchorScripture] = useState("");
-  const [sermonTitle, setSermonTitle] = useState("");
+
   const [userEmail, setUserEmail] = useState("");
 
   const fetchSheets = useCallback(async () => {
@@ -61,7 +62,7 @@ export default function DashboardPage() {
     formData.append("week_date", weekDate);
     formData.append("anchor_scripture", anchorScripture);
     formData.append("user_email", userEmail);
-    formData.append("sermon_title", sermonTitle);
+
 
     try {
       const res = await fetch("/api/upload", {
@@ -74,7 +75,7 @@ export default function DashboardPage() {
         setFile(null);
         setWeekDate("");
         setAnchorScripture("");
-        setSermonTitle("");
+
         fetchSheets();
       }
     } catch (err) {
@@ -182,6 +183,58 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+
+        {/* View Scriptures Button */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowScriptures(!showScriptures)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${
+              showScriptures
+                ? "bg-amber-500/15 border border-amber-500/40 text-amber-300"
+                : "bg-white/[0.03] border border-white/5 text-white/50 hover:border-white/15"
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            {showScriptures ? "Hide" : "View"} Scriptures
+          </button>
+        </div>
+
+        {/* Sorted Scripture List */}
+        {showScriptures && (
+          <div className="mb-8 rounded-2xl bg-white/[0.03] border border-white/5 overflow-hidden">
+            <div className="px-5 py-3 border-b border-white/5 bg-white/[0.02]">
+              <h3 className="text-sm font-medium text-white/70">Scripture Schedule — Sorted by Date</h3>
+            </div>
+            <div className="divide-y divide-white/5">
+              {[...sheets]
+                .sort((a, b) => new Date(a.week_date).getTime() - new Date(b.week_date).getTime())
+                .map((sheet) => {
+                  const d = parseISO(sheet.week_date);
+                  const isPast = isBefore(d, new Date());
+                  return (
+                    <div
+                      key={sheet.id}
+                      className={`flex items-center justify-between px-5 py-3 ${
+                        isPast ? "opacity-40" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs font-mono text-white/30 w-24">
+                          {format(d, "MMM d, yyyy")}
+                        </span>
+                        <span className="text-sm text-white/80">
+                          {sheet.anchor_scripture}
+                        </span>
+                      </div>
+                      <span className="text-xs text-white/30">
+                        {sheet.sermon_title || ""}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
         {/* Search + Filters */}
         <div className="flex items-center gap-3 mb-6">
@@ -358,19 +411,6 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Sermon Title */}
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5 uppercase tracking-wider">
-                  Sermon Title (optional)
-                </label>
-                <input
-                  type="text"
-                  value={sermonTitle}
-                  onChange={(e) => setSermonTitle(e.target.value)}
-                  placeholder="e.g. Walking in Faith"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-amber-500/50 transition-all"
-                />
-              </div>
 
               {/* Email */}
               <div>
