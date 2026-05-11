@@ -15,7 +15,9 @@ import {
   Clock,
   ChevronRight,
   Search,
+  Sparkles,
 } from "lucide-react";
+import Link from "next/link";
 
 export default function DashboardPage() {
   const [sheets, setSheets] = useState<ScriptureSheet[]>([]);
@@ -121,13 +123,22 @@ export default function DashboardPage() {
               <p className="text-xs text-white/40">Scripture Sheet Manager</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowUpload(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-amber-500/20 transition-all duration-300 hover:scale-[1.02]"
-          >
-            <Plus className="w-4 h-4" />
-            New Sheet
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/assistant"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-violet-500/20 transition-all duration-300 hover:scale-[1.02]"
+            >
+              <Sparkles className="w-4 h-4" />
+              Sermon AI
+            </Link>
+            <button
+              onClick={() => setShowUpload(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-amber-500/20 transition-all duration-300 hover:scale-[1.02]"
+            >
+              <Plus className="w-4 h-4" />
+              New Sheet
+            </button>
+          </div>
         </div>
       </header>
 
