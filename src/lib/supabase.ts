@@ -10,6 +10,7 @@ export type ScriptureSheet = {
   pdf_url: string;
   week_date: string;
   anchor_scripture: string;
+  supporting_scriptures: string | null;
   user_email: string;
   sermon_title: string | null;
   created_at: string;

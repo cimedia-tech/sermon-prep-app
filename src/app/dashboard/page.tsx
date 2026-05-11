@@ -211,24 +211,38 @@ export default function DashboardPage() {
                 .map((sheet) => {
                   const d = parseISO(sheet.week_date);
                   const isPast = isBefore(d, new Date());
+                  const supporting = sheet.supporting_scriptures
+                    ? sheet.supporting_scriptures.split(" | ").filter(s => s !== sheet.anchor_scripture)
+                    : [];
                   return (
                     <div
                       key={sheet.id}
-                      className={`flex items-center justify-between px-5 py-3 ${
-                        isPast ? "opacity-40" : ""
-                      }`}
+                      className={`px-5 py-4 ${isPast ? "opacity-40" : ""}`}
                     >
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs font-mono text-white/30 w-24">
-                          {format(d, "MMM d, yyyy")}
-                        </span>
-                        <span className="text-sm text-white/80">
-                          {sheet.anchor_scripture}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                          <span className="text-xs font-mono text-white/30 w-24 pt-0.5 flex-shrink-0">
+                            {format(d, "MMM d, yyyy")}
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-amber-300">
+                              {sheet.anchor_scripture}
+                            </p>
+                            {supporting.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                                {supporting.map((s, i) => (
+                                  <span key={i} className="text-xs text-white/40">
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-xs text-white/20 flex-shrink-0 pt-0.5">
+                          {sheet.sermon_title || ""}
                         </span>
                       </div>
-                      <span className="text-xs text-white/30">
-                        {sheet.sermon_title || ""}
-                      </span>
                     </div>
                   );
                 })}
