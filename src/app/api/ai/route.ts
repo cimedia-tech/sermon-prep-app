@@ -1,15 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+type ModelId = "gpt-4o" | "gpt-4o-mini" | "gemini-flash";
+
+async function generateOpenAI(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured. Add it in Vercel env vars.");
+  const openai = new OpenAI({ apiKey });
+
+  const completion = await openai.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    max_tokens: 4000,
+    temperature: 0.7,
+  });
+
+  return completion.choices[0]?.message?.content || "No response generated.";
+}
+
+async function generateGemini(systemPrompt: string, userPrompt: string): Promise<string> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_AI_API_KEY not configured. Add it in Vercel env vars.");
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    systemInstruction: systemPrompt,
+  });
+
+  const result = await model.generateContent(userPrompt);
+  return result.response.text() || "No response generated.";
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
-    }
-    const openai = new OpenAI({ apiKey });
-
-    const { scripture, title, mode, commentaries = [] } = await req.json();
+    const { scripture, title, mode, commentaries = [], llm = "gpt-4o" } = await req.json();
 
     const commentaryNames: Record<string, string> = {
       matthew_henry: "Matthew Henry's Commentary",
@@ -93,20 +122,26 @@ Then recommend which angle is strongest and why. Use markdown formatting.`,
     };
 
     const systemPrompt = (prompts[mode] || prompts.outline) + selectedCommentaryText;
+    const userPrompt = `Prepare content for: ${scripture}${title ? ` — "${title}"` : ""}`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Prepare content for: ${scripture}${title ? ` — "${title}"` : ""}` },
-      ],
-      max_tokens: 4000,
-      temperature: 0.7,
-    });
+    let content: string;
+    const modelId = llm as ModelId;
 
-    const content = completion.choices[0]?.message?.content || "No response generated.";
+    switch (modelId) {
+      case "gpt-4o":
+        content = await generateOpenAI("gpt-4o", systemPrompt, userPrompt);
+        break;
+      case "gpt-4o-mini":
+        content = await generateOpenAI("gpt-4o-mini", systemPrompt, userPrompt);
+        break;
+      case "gemini-flash":
+        content = await generateGemini(systemPrompt, userPrompt);
+        break;
+      default:
+        content = await generateOpenAI("gpt-4o", systemPrompt, userPrompt);
+    }
 
-    return NextResponse.json({ success: true, content });
+    return NextResponse.json({ success: true, content, model: modelId });
   } catch (err: unknown) {
     console.error("AI error:", err);
     const message = err instanceof Error ? err.message : "Internal server error";

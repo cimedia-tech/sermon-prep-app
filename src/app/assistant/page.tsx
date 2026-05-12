@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Copy,
   Check,
+  Cpu,
   Calendar,
 } from "lucide-react";
 import Link from "next/link";
@@ -20,6 +21,13 @@ import { supabase, ScriptureSheet } from "@/lib/supabase";
 import { format, parseISO } from "date-fns";
 
 type Mode = "outline" | "exegesis" | "devotional" | "points";
+type LLM = "gpt-4o" | "gpt-4o-mini" | "gemini-flash";
+
+const LLM_OPTIONS: { id: LLM; label: string; badge: string; color: string }[] = [
+  { id: "gpt-4o", label: "GPT-4o", badge: "Premium", color: "from-emerald-500 to-teal-600" },
+  { id: "gpt-4o-mini", label: "GPT-4o Mini", badge: "Budget", color: "from-sky-500 to-blue-600" },
+  { id: "gemini-flash", label: "Gemini Flash", badge: "Google", color: "from-amber-500 to-orange-500" },
+];
 
 const modes: { id: Mode; label: string; icon: typeof BookOpen; desc: string }[] = [
   { id: "outline", label: "Sermon Outline", icon: FileText, desc: "Full structured outline with points & applications" },
@@ -47,6 +55,7 @@ export default function AssistantPage() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedCommentaries, setSelectedCommentaries] = useState<string[]>([]);
+  const [llm, setLlm] = useState<LLM>("gpt-4o");
   const resultRef = useRef<HTMLDivElement>(null);
 
   // Fetch scripture sheets on mount
@@ -105,6 +114,7 @@ export default function AssistantPage() {
           title,
           mode,
           commentaries: selectedCommentaries,
+          llm,
         }),
       });
 
@@ -152,8 +162,26 @@ export default function AssistantPage() {
               <h1 className="text-lg font-semibold text-white tracking-tight">
                 Sermon AI
               </h1>
-              <p className="text-xs text-white/40">Powered by GPT-4o</p>
+              <p className="text-xs text-white/40">Powered by {LLM_OPTIONS.find(l => l.id === llm)?.label}</p>
             </div>
+          </div>
+
+          {/* LLM Switcher */}
+          <div className="flex items-center gap-1.5 bg-white/5 rounded-xl p-1">
+            {LLM_OPTIONS.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => setLlm(l.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                  llm === l.id
+                    ? `bg-gradient-to-r ${l.color} text-white shadow-md`
+                    : "text-white/40 hover:text-white/60"
+                }`}
+              >
+                <Cpu className="w-3 h-3" />
+                {l.label}
+              </button>
+            ))}
           </div>
         </div>
       </header>
