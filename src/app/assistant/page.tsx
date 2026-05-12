@@ -13,8 +13,11 @@ import {
   ArrowLeft,
   Copy,
   Check,
+  Calendar,
 } from "lucide-react";
 import Link from "next/link";
+import { supabase, ScriptureSheet } from "@/lib/supabase";
+import { format, parseISO } from "date-fns";
 
 type Mode = "outline" | "exegesis" | "devotional" | "points";
 
@@ -34,7 +37,10 @@ const COMMENTARIES = [
 ];
 
 export default function AssistantPage() {
+  const [sheets, setSheets] = useState<ScriptureSheet[]>([]);
+  const [selectedDate, setSelectedDate] = useState("");
   const [scripture, setScripture] = useState("");
+  const [supportingText, setSupportingText] = useState("");
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<Mode>("outline");
   const [result, setResult] = useState("");
@@ -42,6 +48,37 @@ export default function AssistantPage() {
   const [copied, setCopied] = useState(false);
   const [selectedCommentaries, setSelectedCommentaries] = useState<string[]>([]);
   const resultRef = useRef<HTMLDivElement>(null);
+
+  // Fetch scripture sheets on mount
+  useEffect(() => {
+    const fetchSheets = async () => {
+      const { data } = await supabase
+        .from("scripture_sheets")
+        .select("*")
+        .order("week_date", { ascending: true });
+      if (data) setSheets(data);
+    };
+    fetchSheets();
+  }, []);
+
+  // When a date is selected, auto-fill scripture fields
+  const handleDateSelect = (dateValue: string) => {
+    setSelectedDate(dateValue);
+    const sheet = sheets.find((s) => s.week_date === dateValue);
+    if (sheet) {
+      setScripture(sheet.anchor_scripture);
+      setTitle(sheet.sermon_title || "");
+      // Build supporting text for the prompt
+      if (sheet.supporting_scriptures) {
+        const supporting = sheet.supporting_scriptures
+          .split(" | ")
+          .filter((s) => s !== sheet.anchor_scripture);
+        setSupportingText(supporting.join(", "));
+      } else {
+        setSupportingText("");
+      }
+    }
+  };
 
   const toggleCommentary = (id: string) => {
     setSelectedCommentaries((prev) =>
@@ -54,11 +91,21 @@ export default function AssistantPage() {
     setLoading(true);
     setResult("");
 
+    // Include supporting scriptures in the request
+    const fullScripture = supportingText
+      ? `${scripture} (Supporting readings: ${supportingText})`
+      : scripture;
+
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scripture, title, mode, commentaries: selectedCommentaries }),
+        body: JSON.stringify({
+          scripture: fullScripture,
+          title,
+          mode,
+          commentaries: selectedCommentaries,
+        }),
       });
 
       const data = await res.json();
@@ -146,9 +193,58 @@ export default function AssistantPage() {
         {/* Input Section */}
         <div className="rounded-2xl bg-white/[0.03] border border-white/5 p-6 mb-6">
           <div className="space-y-4">
+
+            {/* Date Picker Dropdown */}
             <div>
               <label className="block text-xs text-white/50 mb-1.5 uppercase tracking-wider">
-                Scripture Reference *
+                Select Sunday Date
+              </label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+                <select
+                  value={selectedDate}
+                  onChange={(e) => handleDateSelect(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all appearance-none cursor-pointer"
+                >
+                  <option value="" className="bg-[#1a1a2e] text-white/50">
+                    — Pick a date to auto-fill scriptures —
+                  </option>
+                  {sheets.map((s) => {
+                    const d = parseISO(s.week_date);
+                    return (
+                      <option
+                        key={s.id}
+                        value={s.week_date}
+                        className="bg-[#1a1a2e] text-white"
+                      >
+                        {format(d, "MMM d, yyyy")} — {s.anchor_scripture}
+                        {s.sermon_title ? ` (${s.sermon_title})` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+
+            {/* Selected Scriptures Display */}
+            {selectedDate && (
+              <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4">
+                <p className="text-xs text-violet-400 uppercase tracking-wider mb-2">
+                  Selected Readings
+                </p>
+                <p className="text-sm font-semibold text-amber-300 mb-1">
+                  {scripture}
+                </p>
+                {supportingText && (
+                  <p className="text-xs text-white/40">{supportingText}</p>
+                )}
+              </div>
+            )}
+
+            {/* Manual Scripture Override */}
+            <div>
+              <label className="block text-xs text-white/50 mb-1.5 uppercase tracking-wider">
+                Scripture Reference {selectedDate ? "(auto-filled)" : "*"}
               </label>
               <input
                 type="text"
@@ -159,6 +255,8 @@ export default function AssistantPage() {
                 onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
               />
             </div>
+
+            {/* Sermon Title */}
             <div>
               <label className="block text-xs text-white/50 mb-1.5 uppercase tracking-wider">
                 Sermon Title / Theme (optional)
