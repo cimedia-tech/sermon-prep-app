@@ -55,7 +55,7 @@ export default function AssistantPage() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedCommentaries, setSelectedCommentaries] = useState<string[]>([]);
-  const [llm, setLlm] = useState<LLM>("gpt-4o");
+  const [llm, setLlm] = useState<LLM>("gemini-flash");
   const resultRef = useRef<HTMLDivElement>(null);
 
   // Fetch scripture sheets on mount
