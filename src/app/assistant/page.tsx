@@ -46,7 +46,7 @@ const COMMENTARIES = [
 
 export default function AssistantPage() {
   const [sheets, setSheets] = useState<ScriptureSheet[]>([]);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSheetId, setSelectedSheetId] = useState("");
   const [scripture, setScripture] = useState("");
   const [supportingText, setSupportingText] = useState("");
   const [title, setTitle] = useState("");
@@ -70,10 +70,10 @@ export default function AssistantPage() {
     fetchSheets();
   }, []);
 
-  // When a date is selected, auto-fill scripture fields
-  const handleDateSelect = (dateValue: string) => {
-    setSelectedDate(dateValue);
-    const sheet = sheets.find((s) => s.week_date === dateValue);
+  // When a sheet is selected, auto-fill scripture fields
+  const handleSheetSelect = (sheetId: string) => {
+    setSelectedSheetId(sheetId);
+    const sheet = sheets.find((s) => s.id === sheetId);
     if (sheet) {
       setScripture(sheet.anchor_scripture);
       setTitle(sheet.sermon_title || "");
@@ -86,6 +86,10 @@ export default function AssistantPage() {
       } else {
         setSupportingText("");
       }
+    } else {
+      setScripture("");
+      setTitle("");
+      setSupportingText("");
     }
   };
 
@@ -230,8 +234,8 @@ export default function AssistantPage() {
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
                 <select
-                  value={selectedDate}
-                  onChange={(e) => handleDateSelect(e.target.value)}
+                  value={selectedSheetId}
+                  onChange={(e) => handleSheetSelect(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all appearance-none cursor-pointer"
                 >
                   <option value="" className="bg-[#1a1a2e] text-white/50">
@@ -239,10 +243,12 @@ export default function AssistantPage() {
                   </option>
                   {sheets.map((s) => {
                     const d = parseISO(s.week_date);
+                    // Account for potentially differing timezone offsets by formatting the date string directly or creating a new UTC date if needed.
+                    // parseISO works fine, but let's make sure it shows cleanly.
                     return (
                       <option
                         key={s.id}
-                        value={s.week_date}
+                        value={s.id}
                         className="bg-[#1a1a2e] text-white"
                       >
                         {format(d, "MMM d, yyyy")} — {s.anchor_scripture}
@@ -255,7 +261,7 @@ export default function AssistantPage() {
             </div>
 
             {/* Selected Scriptures Display */}
-            {selectedDate && (
+            {selectedSheetId && (
               <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4">
                 <p className="text-xs text-violet-400 uppercase tracking-wider mb-2">
                   Selected Readings
@@ -272,7 +278,7 @@ export default function AssistantPage() {
             {/* Manual Scripture Override */}
             <div>
               <label className="block text-xs text-white/50 mb-1.5 uppercase tracking-wider">
-                Scripture Reference {selectedDate ? "(auto-filled)" : "*"}
+                Scripture Reference {selectedSheetId ? "(auto-filled)" : "*"}
               </label>
               <input
                 type="text"
