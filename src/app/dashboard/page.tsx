@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase, ScriptureSheet } from "@/lib/supabase";
-import { format, parseISO, isAfter, isBefore, addDays } from "date-fns";
+import { format, parseISO, isAfter, isBefore, addDays, startOfDay } from "date-fns";
 import {
   Upload,
   BookOpen,
@@ -90,22 +90,23 @@ export default function DashboardPage() {
       sheet.anchor_scripture.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (sheet.sermon_title || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-    const today = new Date();
+    const today = startOfDay(new Date());
     const sheetDate = parseISO(sheet.week_date);
 
-    if (filter === "upcoming") return matchesSearch && isAfter(sheetDate, today);
-    if (filter === "past") return matchesSearch && isBefore(sheetDate, today);
+    if (filter === "upcoming") return matchesSearch && sheetDate >= today;
+    if (filter === "past") return matchesSearch && sheetDate < today;
     return matchesSearch;
   });
 
-  const upcomingCount = sheets.filter((s) =>
-    isAfter(parseISO(s.week_date), new Date())
-  ).length;
+  const upcomingCount = sheets.filter((s) => {
+    const d = parseISO(s.week_date);
+    return d >= startOfDay(new Date());
+  }).length;
 
   const thisWeekCount = sheets.filter((s) => {
     const d = parseISO(s.week_date);
-    const now = new Date();
-    return isAfter(d, now) && isBefore(d, addDays(now, 7));
+    const today = startOfDay(new Date());
+    return d >= today && d < addDays(today, 7);
   }).length;
 
   return (
@@ -210,7 +211,7 @@ export default function DashboardPage() {
                 .sort((a, b) => new Date(a.week_date).getTime() - new Date(b.week_date).getTime())
                 .map((sheet) => {
                   const d = parseISO(sheet.week_date);
-                  const isPast = isBefore(d, new Date());
+                  const isPast = d < startOfDay(new Date());
                   const supporting = sheet.supporting_scriptures
                     ? sheet.supporting_scriptures.split(" | ").filter(s => s !== sheet.anchor_scripture)
                     : [];
@@ -297,9 +298,10 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {filteredSheets.map((sheet) => {
               const sheetDate = parseISO(sheet.week_date);
-              const isUpcoming = isAfter(sheetDate, new Date());
+              const today = startOfDay(new Date());
+              const isUpcoming = sheetDate >= today;
               const isThisWeek =
-                isUpcoming && isBefore(sheetDate, addDays(new Date(), 7));
+                isUpcoming && sheetDate < addDays(today, 7);
 
               return (
                 <a
