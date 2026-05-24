@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-type ModelId = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "ollama";
+type ModelId = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "groq" | "ollama";
 
 async function generateOpenAI(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -34,6 +34,27 @@ async function generateGemini(systemPrompt: string, userPrompt: string): Promise
 
   const result = await model.generateContent(userPrompt);
   return result.response.text() || "No response generated.";
+}
+
+async function generateGroq(systemPrompt: string, userPrompt: string): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY not configured. Add it in Vercel env vars.");
+  const openai = new OpenAI({
+    apiKey,
+    baseURL: "https://api.groq.com/openai/v1",
+  });
+
+  const completion = await openai.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    max_tokens: 4000,
+    temperature: 0.7,
+  });
+
+  return completion.choices[0]?.message?.content || "No response generated.";
 }
 
 async function generateOllama(systemPrompt: string, userPrompt: string): Promise<string> {
@@ -189,6 +210,9 @@ Then recommend which angle is strongest and why. Use markdown formatting.`,
         case "gemini-flash":
           content = await generateGemini(systemPrompt, userPrompt);
           break;
+        case "groq":
+          content = await generateGroq(systemPrompt, userPrompt);
+          break;
         case "ollama":
           content = await generateOllama(systemPrompt, userPrompt);
           break;
@@ -197,7 +221,36 @@ Then recommend which angle is strongest and why. Use markdown formatting.`,
       }
     } catch (primaryError: any) {
       console.warn(`Primary model ${modelId} failed:`, primaryError);
-      if (modelId !== "ollama") {
+      
+      let groqFailedOrSkipped = false;
+      let groqErrorMsg = "";
+
+      // 1. Try falling back to Groq if the primary model wasn't Groq/Ollama and we have a key
+      if (modelId !== "groq" && modelId !== "ollama" && process.env.GROQ_API_KEY) {
+        console.log("Attempting fallback to Groq (Cloud)...");
+        try {
+          content = await generateGroq(systemPrompt, userPrompt);
+          fallbackUsed = true;
+          actualModelUsed = "groq";
+          return NextResponse.json({
+            success: true,
+            content,
+            model: actualModelUsed,
+            fallbackUsed,
+            primaryModel: modelId
+          });
+        } catch (groqError: any) {
+          console.warn("Fallback to Groq failed:", groqError);
+          groqFailedOrSkipped = true;
+          groqErrorMsg = groqError instanceof Error ? groqError.message : String(groqError);
+        }
+      } else {
+        groqFailedOrSkipped = true;
+        groqErrorMsg = !process.env.GROQ_API_KEY ? "GROQ_API_KEY not configured" : "Skipped (primary model was Groq or Ollama)";
+      }
+
+      // 2. Try falling back to Ollama if the primary model wasn't Ollama (and Groq was skipped or failed)
+      if (modelId !== "ollama" && groqFailedOrSkipped) {
         console.log("Attempting fallback to local Ollama...");
         try {
           content = await generateOllama(systemPrompt, userPrompt);
@@ -209,6 +262,7 @@ Then recommend which angle is strongest and why. Use markdown formatting.`,
           const ollamaMsg = ollamaError instanceof Error ? ollamaError.message : String(ollamaError);
           throw new Error(
             `Primary model error (${modelId}): ${primaryMsg}. ` +
+            (modelId !== "groq" && process.env.GROQ_API_KEY ? `Groq fallback error: ${groqErrorMsg}. ` : "") +
             `Local Ollama fallback also failed: ${ollamaMsg}`
           );
         }

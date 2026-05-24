@@ -21,12 +21,13 @@ import { supabase, ScriptureSheet } from "@/lib/supabase";
 import { format, parseISO } from "date-fns";
 
 type Mode = "outline" | "exegesis" | "devotional" | "points";
-type LLM = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "ollama";
+type LLM = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "groq" | "ollama";
 
 const LLM_OPTIONS: { id: LLM; label: string; badge: string; color: string }[] = [
   { id: "gpt-4o", label: "GPT-4o", badge: "Premium", color: "from-emerald-500 to-teal-600" },
   { id: "gpt-4o-mini", label: "GPT-4o Mini", badge: "Budget", color: "from-sky-500 to-blue-600" },
   { id: "gemini-flash", label: "Gemini Flash", badge: "Google", color: "from-amber-500 to-orange-500" },
+  { id: "groq", label: "Groq (Llama 3.3)", badge: "Free Cloud", color: "from-orange-500 to-red-600" },
   { id: "ollama", label: "Ollama (Local)", badge: "Free", color: "from-slate-500 to-slate-700" },
 ];
 
@@ -404,9 +405,11 @@ export default function AssistantPage() {
               <div className="mb-4 p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-xl text-xs flex items-start gap-2.5 shadow-inner">
                 <Sparkles className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold">Local Fallback Active: </span>
+                  <span className="font-semibold">
+                    {fallbackInfo.actualModel === "ollama" ? "Local Fallback Active: " : "Cloud Fallback Active: "}
+                  </span>
                   Cloud model <strong>{LLM_OPTIONS.find(l => l.id === fallbackInfo.primaryModel)?.label}</strong> request failed (tokens/quota limit exceeded). 
-                  Automatically fell back to local <strong>Ollama</strong> model.
+                  Automatically fell back to <strong>{LLM_OPTIONS.find(l => l.id === fallbackInfo.actualModel as LLM)?.label || fallbackInfo.actualModel}</strong>.
                 </div>
               </div>
             )}

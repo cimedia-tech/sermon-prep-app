@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, ScriptureSheet } from "@/lib/supabase";
 import { format, parseISO, isAfter, isBefore, addDays, startOfDay } from "date-fns";
 import {
@@ -16,6 +16,9 @@ import {
   ChevronRight,
   Search,
   Sparkles,
+  Send,
+  MessageSquare,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,6 +37,65 @@ export default function DashboardPage() {
   const [anchorScripture, setAnchorScripture] = useState("");
 
   const [userEmail, setUserEmail] = useState("");
+
+  // Telegram Chat Bridge State
+  const [chatLogs, setChatLogs] = useState<any[]>([]);
+  const [chatMsg, setChatMsg] = useState("");
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchTelegramLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/telegram");
+      const data = await res.json();
+      if (data.success) {
+        setChatLogs(data.logs || []);
+        setChatError("");
+      } else {
+        setChatError(data.error || "Failed to load chat logs");
+      }
+    } catch {
+      setChatError("Local Telegram logs inaccessible. Make sure the app is running on localhost.");
+    }
+  }, []);
+
+  const handleSendTelegram = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatMsg.trim() || sendingMsg) return;
+
+    setSendingMsg(true);
+    try {
+      const res = await fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: chatMsg }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setChatMsg("");
+        fetchTelegramLogs();
+      } else {
+        alert(`Error sending message: ${data.error}`);
+      }
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    } finally {
+      setSendingMsg(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTelegramLogs();
+    const interval = setInterval(fetchTelegramLogs, 2000);
+    return () => clearInterval(interval);
+  }, [fetchTelegramLogs]);
+
+  useEffect(() => {
+    if (chatLogs.length > 0 && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatLogs]);
 
   const fetchSheets = useCallback(async () => {
     const { data, error } = await supabase
@@ -265,115 +327,200 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Search + Filters */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-            <input
-              type="text"
-              placeholder="Search by scripture or title..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
-            />
-          </div>
-          <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-            {(["all", "upcoming", "past"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-4 py-2 text-xs font-medium rounded-lg capitalize transition-all ${
-                  filter === f
-                    ? "bg-amber-500 text-white shadow-md"
-                    : "text-white/40 hover:text-white/60"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          {/* Left Column: Sheets & Search */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Search + Filters */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <input
+                  type="text"
+                  placeholder="Search by scripture or title..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                />
+              </div>
+              <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+                {(["all", "upcoming", "past"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`px-4 py-2 text-xs font-medium rounded-lg capitalize transition-all ${
+                      filter === f
+                        ? "bg-amber-500 text-white shadow-md"
+                        : "text-white/40 hover:text-white/60"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Scripture Sheets List */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : filteredSheets.length === 0 ? (
-          <div className="text-center py-20">
-            <BookOpen className="w-12 h-12 text-white/10 mx-auto mb-4" />
-            <p className="text-white/30 text-sm">
-              {sheets.length === 0
-                ? "No scripture sheets yet. Upload your first one!"
-                : "No results match your search."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredSheets.map((sheet) => {
-              const sheetDate = parseISO(sheet.week_date);
-              const today = startOfDay(new Date());
-              const isUpcoming = sheetDate >= today;
-              const isThisWeek =
-                isUpcoming && sheetDate < addDays(today, 7);
+            {/* Scripture Sheets List */}
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : filteredSheets.length === 0 ? (
+              <div className="text-center py-20">
+                <BookOpen className="w-12 h-12 text-white/10 mx-auto mb-4" />
+                <p className="text-white/30 text-sm">
+                  {sheets.length === 0
+                    ? "No scripture sheets yet. Upload your first one!"
+                    : "No results match your search."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredSheets.map((sheet) => {
+                  const sheetDate = parseISO(sheet.week_date);
+                  const today = startOfDay(new Date());
+                  const isUpcoming = sheetDate >= today;
+                  const isThisWeek =
+                    isUpcoming && sheetDate < addDays(today, 7);
 
-              return (
-                <a
-                  key={sheet.id}
-                  href={sheet.pdf_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block rounded-2xl bg-white/[0.03] border border-white/5 hover:border-amber-500/30 p-5 transition-all duration-300 hover:bg-white/[0.06] hover:shadow-lg hover:shadow-amber-500/5"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                          isThisWeek
-                            ? "bg-amber-500/20 text-amber-400"
-                            : isUpcoming
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-white/5 text-white/30"
-                        }`}
-                      >
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-medium text-sm group-hover:text-amber-300 transition-colors">
-                          {sheet.sermon_title || sheet.anchor_scripture}
-                        </h3>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="text-xs text-white/40 flex items-center gap-1">
-                            <BookOpen className="w-3 h-3" />
-                            {sheet.anchor_scripture}
-                          </span>
-                          <span className="text-xs text-white/40 flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {format(sheetDate, "MMM d, yyyy")}
-                          </span>
+                  return (
+                    <a
+                      key={sheet.id}
+                      href={sheet.pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group block rounded-2xl bg-white/[0.03] border border-white/5 hover:border-amber-500/30 p-5 transition-all duration-300 hover:bg-white/[0.06] hover:shadow-lg hover:shadow-amber-500/5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div
+                            className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                              isThisWeek
+                                ? "bg-amber-500/20 text-amber-400"
+                                : isUpcoming
+                                ? "bg-blue-500/20 text-blue-400"
+                                : "bg-white/5 text-white/30"
+                            }`}
+                          >
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-white font-medium text-sm group-hover:text-amber-300 transition-colors">
+                              {sheet.sermon_title || sheet.anchor_scripture}
+                            </h3>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-xs text-white/40 flex items-center gap-1">
+                                <BookOpen className="w-3 h-3" />
+                                {sheet.anchor_scripture}
+                              </span>
+                              <span className="text-xs text-white/40 flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {format(sheetDate, "MMM d, yyyy")}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {isThisWeek && (
+                            <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-medium flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              This Week
+                            </span>
+                          )}
+                          {sheet.is_processed && (
+                            <span className="text-emerald-400">
+                              <Check className="w-4 h-4" />
+                            </span>
+                          )}
+                          <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-amber-400 transition-colors" />
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {isThisWeek && (
-                        <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          This Week
-                        </span>
-                      )}
-                      {sheet.is_processed && (
-                        <span className="text-emerald-400">
-                          <Check className="w-4 h-4" />
-                        </span>
-                      )}
-                      <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-amber-400 transition-colors" />
-                    </div>
-                  </div>
-                </a>
-              );
-            })}
+                    </a>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Right Column: Telegram Live Bridge */}
+          <div className="rounded-2xl bg-white/[0.03] border border-white/5 p-6 backdrop-blur-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-semibold text-white">Telegram Live Bridge</h3>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] text-white/40 uppercase tracking-wider">Bot Active</span>
+              </div>
+            </div>
+
+            {chatError ? (
+              <div className="p-4 bg-amber-500/5 border border-amber-500/10 text-white/40 rounded-xl text-[11px] leading-relaxed text-center space-y-2">
+                <p className="font-semibold text-amber-400/80">Local State Notice</p>
+                <p>{chatError}</p>
+              </div>
+            ) : (
+              <>
+                {/* Chat window */}
+                <div className="h-[320px] overflow-y-auto space-y-3 pr-1 text-xs">
+                  {chatLogs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center text-white/10">
+                      <MessageSquare className="w-8 h-8 mb-2" />
+                      <p>No messages yet. Send a message to the bot to start.</p>
+                    </div>
+                  ) : (
+                    chatLogs.map((log: any, idx: number) => {
+                      const isIncoming = log.direction === "incoming";
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex flex-col ${isIncoming ? "items-start" : "items-end"}`}
+                        >
+                          <span className="text-[9px] text-white/20 mb-0.5 px-1 font-mono">
+                            {log.user} • {log.timestamp ? format(parseISO(log.timestamp), "HH:mm") : ""}
+                          </span>
+                          <div
+                            className={`max-w-[90%] rounded-xl px-3 py-2 leading-relaxed whitespace-pre-wrap ${
+                              isIncoming
+                                ? "bg-white/5 text-white/80 rounded-tl-none border border-white/5"
+                                : "bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-tr-none shadow-md shadow-amber-500/5"
+                            }`}
+                          >
+                            {log.text}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Input field */}
+                <form onSubmit={handleSendTelegram} className="flex gap-2 pt-3 border-t border-white/5">
+                  <input
+                    type="text"
+                    placeholder="Send a message to Telegram..."
+                    value={chatMsg}
+                    onChange={(e) => setChatMsg(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs placeholder:text-white/20 focus:outline-none focus:border-amber-500/50 transition-all"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sendingMsg || !chatMsg.trim()}
+                    className="p-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:shadow-lg hover:shadow-amber-500/10 text-white rounded-xl transition-all disabled:opacity-50 flex items-center justify-center flex-shrink-0"
+                  >
+                    {sendingMsg ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
       </main>
 
       {/* Upload Modal */}
