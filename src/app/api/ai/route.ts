@@ -175,25 +175,55 @@ Then recommend which angle is strongest and why. Use markdown formatting.`,
 
     let content: string;
     const modelId = llm as ModelId;
+    let actualModelUsed: string = modelId;
+    let fallbackUsed = false;
 
-    switch (modelId) {
-      case "gpt-4o":
-        content = await generateOpenAI("gpt-4o", systemPrompt, userPrompt);
-        break;
-      case "gpt-4o-mini":
-        content = await generateOpenAI("gpt-4o-mini", systemPrompt, userPrompt);
-        break;
-      case "gemini-flash":
-        content = await generateGemini(systemPrompt, userPrompt);
-        break;
-      case "ollama":
-        content = await generateOllama(systemPrompt, userPrompt);
-        break;
-      default:
-        content = await generateOpenAI("gpt-4o", systemPrompt, userPrompt);
+    try {
+      switch (modelId) {
+        case "gpt-4o":
+          content = await generateOpenAI("gpt-4o", systemPrompt, userPrompt);
+          break;
+        case "gpt-4o-mini":
+          content = await generateOpenAI("gpt-4o-mini", systemPrompt, userPrompt);
+          break;
+        case "gemini-flash":
+          content = await generateGemini(systemPrompt, userPrompt);
+          break;
+        case "ollama":
+          content = await generateOllama(systemPrompt, userPrompt);
+          break;
+        default:
+          content = await generateOpenAI("gpt-4o", systemPrompt, userPrompt);
+      }
+    } catch (primaryError: any) {
+      console.warn(`Primary model ${modelId} failed:`, primaryError);
+      if (modelId !== "ollama") {
+        console.log("Attempting fallback to local Ollama...");
+        try {
+          content = await generateOllama(systemPrompt, userPrompt);
+          fallbackUsed = true;
+          actualModelUsed = "ollama";
+        } catch (ollamaError: any) {
+          console.error("Fallback to Ollama failed as well:", ollamaError);
+          const primaryMsg = primaryError instanceof Error ? primaryError.message : String(primaryError);
+          const ollamaMsg = ollamaError instanceof Error ? ollamaError.message : String(ollamaError);
+          throw new Error(
+            `Primary model error (${modelId}): ${primaryMsg}. ` +
+            `Local Ollama fallback also failed: ${ollamaMsg}`
+          );
+        }
+      } else {
+        throw primaryError;
+      }
     }
 
-    return NextResponse.json({ success: true, content, model: modelId });
+    return NextResponse.json({
+      success: true,
+      content,
+      model: actualModelUsed,
+      fallbackUsed,
+      primaryModel: modelId
+    });
   } catch (err: unknown) {
     console.error("AI error:", err);
     const message = err instanceof Error ? err.message : "Internal server error";

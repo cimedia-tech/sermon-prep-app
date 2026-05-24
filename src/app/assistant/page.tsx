@@ -57,6 +57,11 @@ export default function AssistantPage() {
   const [copied, setCopied] = useState(false);
   const [selectedCommentaries, setSelectedCommentaries] = useState<string[]>([]);
   const [llm, setLlm] = useState<LLM>("gemini-flash");
+  const [fallbackInfo, setFallbackInfo] = useState<{
+    fallbackUsed: boolean;
+    primaryModel: LLM;
+    actualModel: string;
+  } | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   // Fetch scripture sheets on mount
@@ -104,6 +109,7 @@ export default function AssistantPage() {
     if (!scripture.trim()) return;
     setLoading(true);
     setResult("");
+    setFallbackInfo(null);
 
     // Include supporting scriptures in the request
     const fullScripture = supportingText
@@ -126,6 +132,13 @@ export default function AssistantPage() {
       const data = await res.json();
       if (data.success) {
         setResult(data.content);
+        if (data.fallbackUsed) {
+          setFallbackInfo({
+            fallbackUsed: true,
+            primaryModel: data.primaryModel,
+            actualModel: data.model
+          });
+        }
       } else {
         setResult(`Error: ${data.error}`);
       }
@@ -387,6 +400,16 @@ export default function AssistantPage() {
                 )}
               </button>
             </div>
+            {fallbackInfo?.fallbackUsed && (
+              <div className="mb-4 p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-xl text-xs flex items-start gap-2.5 shadow-inner">
+                <Sparkles className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Local Fallback Active: </span>
+                  Cloud model <strong>{LLM_OPTIONS.find(l => l.id === fallbackInfo.primaryModel)?.label}</strong> request failed (tokens/quota limit exceeded). 
+                  Automatically fell back to local <strong>Ollama</strong> model.
+                </div>
+              </div>
+            )}
             <div className="prose prose-invert prose-sm max-w-none">
               <div
                 className="text-white/80 leading-relaxed whitespace-pre-wrap text-sm"
