@@ -21,12 +21,13 @@ import { supabase, ScriptureSheet } from "@/lib/supabase";
 import { format, parseISO } from "date-fns";
 
 type Mode = "outline" | "exegesis" | "devotional" | "points";
-type LLM = "gpt-4o" | "gpt-4o-mini" | "gemini-flash";
+type LLM = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "ollama";
 
 const LLM_OPTIONS: { id: LLM; label: string; badge: string; color: string }[] = [
   { id: "gpt-4o", label: "GPT-4o", badge: "Premium", color: "from-emerald-500 to-teal-600" },
   { id: "gpt-4o-mini", label: "GPT-4o Mini", badge: "Budget", color: "from-sky-500 to-blue-600" },
   { id: "gemini-flash", label: "Gemini Flash", badge: "Google", color: "from-amber-500 to-orange-500" },
+  { id: "ollama", label: "Ollama (Local)", badge: "Free", color: "from-slate-500 to-slate-700" },
 ];
 
 const modes: { id: Mode; label: string; icon: typeof BookOpen; desc: string }[] = [

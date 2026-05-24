@@ -38,11 +38,27 @@ export default function DashboardPage() {
   const fetchSheets = useCallback(async () => {
     const { data, error } = await supabase
       .from("scripture_sheets")
-      .select("*")
-      .order("week_date", { ascending: false });
+      .select("*");
 
     if (!error && data) {
-      setSheets(data);
+      const today = startOfDay(new Date()).getTime();
+      const sortedData = data.sort((a, b) => {
+        const timeA = parseISO(a.week_date).getTime();
+        const timeB = parseISO(b.week_date).getTime();
+        
+        const isUpcomingA = timeA >= today;
+        const isUpcomingB = timeB >= today;
+        
+        if (isUpcomingA && !isUpcomingB) return -1;
+        if (!isUpcomingA && isUpcomingB) return 1;
+        
+        if (isUpcomingA && isUpcomingB) {
+          return timeA - timeB;
+        } else {
+          return timeB - timeA;
+        }
+      });
+      setSheets(sortedData);
     }
     setLoading(false);
   }, []);
@@ -207,9 +223,7 @@ export default function DashboardPage() {
               <h3 className="text-sm font-medium text-white/70">Scripture Schedule — Sorted by Date</h3>
             </div>
             <div className="divide-y divide-white/5">
-              {[...sheets]
-                .sort((a, b) => new Date(a.week_date).getTime() - new Date(b.week_date).getTime())
-                .map((sheet) => {
+              {sheets.map((sheet) => {
                   const d = parseISO(sheet.week_date);
                   const isPast = d < startOfDay(new Date());
                   const supporting = sheet.supporting_scriptures

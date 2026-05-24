@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-type ModelId = "gpt-4o" | "gpt-4o-mini" | "gemini-flash";
+type ModelId = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "ollama";
 
 async function generateOpenAI(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -34,6 +34,55 @@ async function generateGemini(systemPrompt: string, userPrompt: string): Promise
 
   const result = await model.generateContent(userPrompt);
   return result.response.text() || "No response generated.";
+}
+
+async function generateOllama(systemPrompt: string, userPrompt: string): Promise<string> {
+  // 1. Check available models
+  let availableModels: string[] = [];
+  try {
+    const tagsRes = await fetch("http://127.0.0.1:11434/api/tags");
+    if (tagsRes.ok) {
+      const tagsData = await tagsRes.json();
+      availableModels = tagsData.models?.map((m: any) => m.name) || [];
+    }
+  } catch (err) {
+    throw new Error("Cannot connect to local Ollama. Please ensure the Ollama app is running on your machine.");
+  }
+
+  if (availableModels.length === 0) {
+    throw new Error("Ollama is running, but no models are downloaded. Please open your terminal and run 'ollama pull llama3.2' to download a model.");
+  }
+
+  // 2. Select the best available model (prefer llama3.2, then llama3, then fallback to first available)
+  let selectedModel = availableModels[0];
+  const preferences = ["llama3.2:latest", "llama3.2", "llama3:latest", "llama3"];
+  for (const pref of preferences) {
+    if (availableModels.includes(pref)) {
+      selectedModel = pref;
+      break;
+    }
+  }
+
+  // 3. Generate response
+  const res = await fetch("http://127.0.0.1:11434/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: selectedModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      stream: false,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Ollama API error: ${res.statusText} for model '${selectedModel}'.`);
+  }
+
+  const data = await res.json();
+  return data.message?.content || "No response generated.";
 }
 
 export async function POST(req: NextRequest) {
@@ -136,6 +185,9 @@ Then recommend which angle is strongest and why. Use markdown formatting.`,
         break;
       case "gemini-flash":
         content = await generateGemini(systemPrompt, userPrompt);
+        break;
+      case "ollama":
+        content = await generateOllama(systemPrompt, userPrompt);
         break;
       default:
         content = await generateOpenAI("gpt-4o", systemPrompt, userPrompt);
