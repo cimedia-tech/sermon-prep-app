@@ -15,10 +15,12 @@ import {
   Check,
   Cpu,
   Calendar,
+  FileDown,
 } from "lucide-react";
 import Link from "next/link";
 import { supabase, ScriptureSheet } from "@/lib/supabase";
 import { format, parseISO } from "date-fns";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 type Mode = "outline" | "exegesis" | "devotional" | "points";
 type LLM = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "groq" | "ollama";
@@ -160,6 +162,70 @@ export default function AssistantPage() {
     navigator.clipboard.writeText(result);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleExportPDF = () => {
+    const content = document.getElementById("sermon-content")?.innerHTML;
+    if (!content) return;
+
+    // Create a hidden iframe
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "absolute";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "none";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(`
+        <html>
+          <head>
+            <title>${title || scripture || "Sermon Output"}</title>
+            <style>
+              body {
+                font-family: 'Georgia', serif;
+                line-height: 1.65;
+                color: #111;
+                padding: 40px;
+              }
+              h1 { font-size: 24pt; font-weight: bold; margin-top: 0; margin-bottom: 8px; }
+              .meta { font-size: 10pt; color: #555; margin-bottom: 25px; border-bottom: 2px solid #eaeaea; padding-bottom: 15px; }
+              h2 { font-size: 18pt; font-weight: bold; margin-top: 28px; margin-bottom: 12px; border-bottom: 1px solid #f0f0f0; padding-bottom: 4px; }
+              h3 { font-size: 13pt; font-weight: bold; margin-top: 22px; margin-bottom: 8px; color: #b45309; }
+              h4 { font-size: 11pt; font-weight: bold; margin-top: 18px; margin-bottom: 6px; color: #6d28d9; }
+              p { font-size: 10.5pt; margin-bottom: 12px; text-align: justify; }
+              ul { margin-bottom: 14px; padding-left: 22px; list-style-type: disc; }
+              li { font-size: 10.5pt; margin-bottom: 6px; }
+              strong { font-weight: bold; color: #000; }
+              blockquote { border-left: 3.5px solid #6d28d9; background: #f5f3ff; padding: 12px 18px; margin: 18px 0; font-style: italic; border-radius: 0 6px 6px 0; color: #4b5563; }
+              hr { border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0; }
+              @media print {
+                body { padding: 0; }
+                @page { margin: 1in; }
+              }
+            </style>
+          </head>
+          <body>
+            <h1>${title || "Sermon Prep Output"}</h1>
+            <div class="meta">
+              <strong>Scripture:</strong> ${scripture} | <strong>Generated on:</strong> ${new Date().toLocaleDateString()}
+            </div>
+            <div class="content">
+              ${content}
+            </div>
+          </body>
+        </html>
+      `);
+      doc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        document.body.removeChild(iframe);
+      }, 500);
+    }
   };
 
   return (
@@ -384,22 +450,31 @@ export default function AssistantPage() {
                   {modes.find((m) => m.id === mode)?.label}
                 </span>
               </div>
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-xs transition-all"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    Copy
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-xs transition-all"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  Export to PDF
+                </button>
+                <button
+                  onClick={handleCopy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-xs transition-all"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
             {fallbackInfo?.fallbackUsed && (
               <div className="mb-4 p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-xl text-xs flex items-start gap-2.5 shadow-inner">
@@ -413,12 +488,12 @@ export default function AssistantPage() {
                 </div>
               </div>
             )}
-            <div className="prose prose-invert prose-sm max-w-none">
+            <div id="sermon-content" className="prose prose-invert prose-sm max-w-none">
               <div
-                className="text-white/80 leading-relaxed whitespace-pre-wrap text-sm"
+                className="text-white/80 leading-relaxed text-sm"
                 style={{ fontFamily: "'Georgia', serif" }}
               >
-                {result}
+                <MarkdownRenderer content={result} />
               </div>
             </div>
           </div>
