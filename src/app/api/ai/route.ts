@@ -6,6 +6,19 @@ import path from "path";
 
 type ModelId = "gpt-4o" | "gpt-4o-mini" | "gemini-flash" | "groq" | "ollama";
 
+const ARTIFACT_MAPPING: Record<string, string[]> = {
+  context: ["anchor_scripture", "cross_references"],
+  theme: ["central_theme", "anchor_amplification", "hidden_insights", "prophetic_parallel", "psychological_contrast"],
+  lexicon: ["vocabulary_study"],
+  outline: ["teaching_outline", "leadership_principles"],
+  script: ["teaching_script"],
+  sermon: ["short_sermon", "jesus_connection", "story_illustration"],
+  commentary: ["matthew_henry_perspective", "biblical_character_study"],
+  devotional: ["devotional_reflection", "memory_verse", "discussion_questions"],
+  worship: ["worship_connection", "faith_declarations"],
+  action: ["weekly_action_plan", "ministry_application"]
+};
+
 function cleanAndParseJSON(rawText: string): any {
   let cleaned = rawText.trim();
   
@@ -35,7 +48,7 @@ function cleanAndParseJSON(rawText: string): any {
   }
 }
 
-function deepValidateAndDefault(obj: any): any {
+function deepValidateAndDefault(obj: any, activeFields?: Set<string>): any {
   if (!obj || typeof obj !== "object") {
     throw new Error("AI output is not a JSON object");
   }
@@ -185,10 +198,22 @@ function deepValidateAndDefault(obj: any): any {
     return source;
   };
 
-  return merge(defaults, obj);
+  const merged = merge(defaults, obj);
+
+  if (activeFields && merged.study) {
+    Object.values(ARTIFACT_MAPPING).forEach(fields => {
+      fields.forEach(f => {
+        if (!activeFields.has(f)) {
+          merged.study[f] = null;
+        }
+      });
+    });
+  }
+
+  return merged;
 }
 
-async function generateAndValidate(modelId: ModelId, systemPrompt: string, userPrompt: string): Promise<string> {
+async function generateAndValidate(modelId: ModelId, systemPrompt: string, userPrompt: string, activeFields?: Set<string>): Promise<string> {
   let rawResponse: string;
   switch (modelId) {
     case "gpt-4o":
@@ -211,7 +236,7 @@ async function generateAndValidate(modelId: ModelId, systemPrompt: string, userP
   }
   
   const parsed = cleanAndParseJSON(rawResponse);
-  const validated = deepValidateAndDefault(parsed);
+  const validated = deepValidateAndDefault(parsed, activeFields);
   return JSON.stringify(validated, null, 2);
 }
 
@@ -359,29 +384,15 @@ export async function POST(req: NextRequest) {
       ? `\n\n**IMPORTANT: Include dedicated commentary sections from the following sources:**\n${commentaries.map((c: string) => `- ${commentaryNames[c] || c}`).join("\n")}\n\nFor each selected commentary, add summary and warning/lessons elements to 'matthew_henry_perspective' (or include them in the historical study as appropriate).`
       : "";
 
-    // Artifact and prompt selection mapping
-    const artifactMapping: Record<string, string[]> = {
-      context: ["anchor_scripture", "cross_references"],
-      theme: ["central_theme", "anchor_amplification", "hidden_insights", "prophetic_parallel", "psychological_contrast"],
-      lexicon: ["vocabulary_study"],
-      outline: ["teaching_outline", "leadership_principles"],
-      script: ["teaching_script"],
-      sermon: ["short_sermon", "jesus_connection", "story_illustration"],
-      commentary: ["matthew_henry_perspective", "biblical_character_study"],
-      devotional: ["devotional_reflection", "memory_verse", "discussion_questions"],
-      worship: ["worship_connection", "faith_declarations"],
-      action: ["weekly_action_plan", "ministry_application"]
-    };
-
     let activeFields = new Set<string>();
     if (!selectedArtifacts || selectedArtifacts.length === 0) {
-      Object.values(artifactMapping).forEach(fields => {
+      Object.values(ARTIFACT_MAPPING).forEach(fields => {
         fields.forEach(f => activeFields.add(f));
       });
     } else {
       selectedArtifacts.forEach((a: string) => {
-        if (artifactMapping[a]) {
-          artifactMapping[a].forEach(f => activeFields.add(f));
+        if (ARTIFACT_MAPPING[a]) {
+          ARTIFACT_MAPPING[a].forEach(f => activeFields.add(f));
         }
       });
     }
@@ -690,7 +701,7 @@ Guidelines:
     let fallbackUsed = false;
 
     try {
-      content = await generateAndValidate(modelId, systemPrompt, userPrompt);
+      content = await generateAndValidate(modelId, systemPrompt, userPrompt, activeFields);
     } catch (primaryError: any) {
       console.warn(`Primary model ${modelId} failed (network or JSON schema validation):`, primaryError);
       
@@ -701,7 +712,7 @@ Guidelines:
       if (modelId !== "groq" && modelId !== "ollama" && process.env.GROQ_API_KEY) {
         console.log("Attempting fallback to Groq (Cloud)...");
         try {
-          content = await generateAndValidate("groq", systemPrompt, userPrompt);
+          content = await generateAndValidate("groq", systemPrompt, userPrompt, activeFields);
           fallbackUsed = true;
           actualModelUsed = "groq";
           return NextResponse.json({
@@ -725,7 +736,7 @@ Guidelines:
       if (modelId !== "ollama" && groqFailedOrSkipped) {
         console.log("Attempting fallback to local Ollama...");
         try {
-          content = await generateAndValidate("ollama", systemPrompt, userPrompt);
+          content = await generateAndValidate("ollama", systemPrompt, userPrompt, activeFields);
           fallbackUsed = true;
           actualModelUsed = "ollama";
         } catch (ollamaError: any) {
