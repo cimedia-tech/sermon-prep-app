@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase, ScriptureSheet } from "@/lib/supabase";
+import { supabase, ScriptureSheet, FALLBACK_SHEETS } from "@/lib/supabase";
 import { format, parseISO, isAfter, isBefore, addDays, startOfDay } from "date-fns";
 import {
   Upload,
@@ -98,13 +98,20 @@ export default function DashboardPage() {
   }, [chatLogs]);
 
   const fetchSheets = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("scripture_sheets")
-      .select("*");
+    try {
+      const { data, error } = await supabase
+        .from("scripture_sheets")
+        .select("*");
 
-    if (!error && data) {
+      let sourceData: ScriptureSheet[] = FALLBACK_SHEETS;
+      if (!error && data && data.length > 0) {
+        sourceData = data;
+      } else {
+        console.warn("Supabase returned empty or error, using fallback sheets.");
+      }
+
       const today = startOfDay(new Date()).getTime();
-      const sortedData = data.sort((a, b) => {
+      const sortedData = sourceData.sort((a, b) => {
         const timeA = parseISO(a.week_date).getTime();
         const timeB = parseISO(b.week_date).getTime();
         
@@ -121,6 +128,30 @@ export default function DashboardPage() {
         }
       });
       setSheets(sortedData);
+    } catch (e) {
+      console.error("Failed to fetch from Supabase, using sorted fallback sheets:", e);
+      try {
+        const today = startOfDay(new Date()).getTime();
+        const sortedData = [...FALLBACK_SHEETS].sort((a, b) => {
+          const timeA = parseISO(a.week_date).getTime();
+          const timeB = parseISO(b.week_date).getTime();
+          
+          const isUpcomingA = timeA >= today;
+          const isUpcomingB = timeB >= today;
+          
+          if (isUpcomingA && !isUpcomingB) return -1;
+          if (!isUpcomingA && isUpcomingB) return 1;
+          
+          if (isUpcomingA && isUpcomingB) {
+            return timeA - timeB;
+          } else {
+            return timeB - timeA;
+          }
+        });
+        setSheets(sortedData);
+      } catch (err) {
+        setSheets(FALLBACK_SHEETS);
+      }
     }
     setLoading(false);
   }, []);
